@@ -40,7 +40,8 @@ const tokens: Record<number, Record<string, string>> = {
 
 const contracts = {
     11155111: "0xE0636c80c18931cf5BFd24c8A3679aa85e8e7d8D",
-    11142220: "0x46c0752624339B3A3e3ACbcB75faa173a5d25928"
+    11142220: "0x46c0752624339B3A3e3ACbcB75faa173a5d25928",
+    56: "0x523AfBf98bb1e82A4B2373C033E8a5381721AE30"
 }
 
 export { tokens, contracts }
