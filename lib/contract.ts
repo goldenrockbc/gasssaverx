@@ -10,7 +10,7 @@ const tokens: Record<number, Record<string, string>> = {
     },
     56: {
         USDT: "0x55d398326f99059fF775485246999027B3197955",
-        USDC: "0xBDeD8Ec7EFc7C3bE1Bf086d3832285c12B6CB2f4",
+        USDC: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
         ETH: "0xC8673dE666Ac880C4f220176588C6d368D574aaF",
         BNB: ethers.ZeroAddress,
         MATIC: "0xC8673dE666Ac880C4f220176588C6d368D574aaF"

@@ -125,6 +125,8 @@ export default function useGassaver() {
                     signer
                 );
 
+                console.log({ address: contracts[chainId as keyof typeof contracts] })
+
                 setContract(contractInstance);
             } catch (error) {
                 console.log({ error });
