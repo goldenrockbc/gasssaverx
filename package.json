@@ -12,11 +12,15 @@
     "@reown/appkit": "^1.8.14",
     "@reown/appkit-adapter-ethers": "^1.8.14",
     "@solana/kit": "^3.0.3",
+    "@tronweb3/tronwallet-adapter-react-hooks": "^1.1.10",
+    "@tronweb3/tronwallet-adapter-react-ui": "^1.1.11",
+    "@tronweb3/tronwallet-adapters": "^1.2.16",
     "axios": "^1.13.2",
     "ethers": "^6.16.0",
     "next": "^16.0.7",
     "react": "^19.2.1",
-    "react-dom": "^19.2.1"
+    "react-dom": "^19.2.1",
+    "tronweb": "^6.1.1"
   },
   "devDependencies": {
     "@iconify/react": "^6.0.2",

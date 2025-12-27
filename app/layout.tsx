@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css";
 import AppkitProvider from "@/providers/AppkitProvider";
+import { ChainProvider } from "@/providers/ChainProvider";
+import TronProviderWrapper from "@/providers/TronProviderWrapper";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -25,7 +27,11 @@ export default function RootLayout({
       <body
         className={`${poppins.className} antialiased bg-zinc-950 text-zinc-50`}
       >
-        <AppkitProvider>{children}</AppkitProvider>
+        <ChainProvider>
+          <TronProviderWrapper>
+            <AppkitProvider>{children}</AppkitProvider>
+          </TronProviderWrapper>
+        </ChainProvider>
       </body>
     </html>
   );

@@ -1,9 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ["thread-stream"]
-  },
+  serverExternalPackages: ["thread-stream"]
 };
 
 export default nextConfig;

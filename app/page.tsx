@@ -1,7 +1,10 @@
 "use client";
 import Navbar from "@/components/Navbar";
+import WalletDebug from "@/components/WalletDebug";
 import useGassaver from "@/hooks/useGassaver";
+import useTronGassaver from "@/hooks/useTronGassaver";
 import { networks } from "@/providers/AppkitProvider";
+import { useChain } from "@/providers/ChainProvider";
 import { AppKitNetwork } from "@reown/appkit/networks";
 import { useAppKitNetwork } from "@reown/appkit/react";
 import { useEffect, useMemo, useState } from "react";
@@ -22,33 +25,57 @@ type RecipientRow = {
 
 type TxStatus = "idle" | "estimating" | "review" | "broadcasting" | "completed";
 
-const TOKENS = ["USDT", "USDC", "ETH", "BNB", "MATIC"];
+const EVM_TOKENS = ["USDT", "USDC", "ETH", "BNB", "MATIC"];
+const TRON_TOKENS = ["USDT", "USDC", "TRX"];
 
-const TEMPLATE_CONTENT =
+const EVM_TEMPLATE =
   "address,token,amount\n0xAbc...,USDT,120\n0xFF3...,ETH,0.03\n";
+const TRON_TEMPLATE =
+  "address,token,amount\nT9yD14Nj...,USDT,120\nTEkxiTehn...,TRX,50\n";
 
-function createEmptyRow(): RecipientRow {
+function createEmptyRow(defaultToken: string = "USDT"): RecipientRow {
   return {
     id: crypto.randomUUID(),
     address: "",
-    token: "USDT",
+    token: defaultToken,
     amount: "",
   };
 }
 
 export default function Home() {
+  const { chainType } = useChain();
+  const tokens = chainType === "evm" ? EVM_TOKENS : TRON_TOKENS;
+
   const [selectedNetwork, setSelectedNetwork] = useState<AppKitNetwork>(
     networks[0]
   );
   const [optimization, setOptimization] =
     useState<OptimizationLevel>("standard");
-  const [entries, setEntries] = useState<RecipientRow[]>([createEmptyRow()]);
+  const [entries, setEntries] = useState<RecipientRow[]>([
+    createEmptyRow(tokens[0]),
+  ]);
   const [txStatus, setTxStatus] = useState<TxStatus>("idle");
   const [txHash] = useState<string | null>(null);
   const [showReview, setShowReview] = useState(false);
   const [entryMode, setEntryMode] = useState<EntryMode>("manual");
   const { switchNetwork } = useAppKitNetwork();
-  const { bulkTransfer } = useGassaver();
+  const { bulkTransfer: evmBulkTransfer } = useGassaver();
+  const { bulkTransfer: tronBulkTransfer } = useTronGassaver();
+  const [globalError, setGlobalError] = useState<string | null>(null);
+
+  // Clear global error after 5 seconds
+  useEffect(() => {
+    if (globalError) {
+      const timer = setTimeout(() => setGlobalError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [globalError]);
+
+  // Reset entries when chain changes
+  useEffect(() => {
+    // Move state update into a micro-task to avoid synchronous setState inside the effect
+    queueMicrotask(() => setEntries([createEmptyRow(tokens[0])]));
+  }, [chainType]);
 
   const validEntries = useMemo(
     () => entries.filter((e) => !e.error && e.address && e.token && e.amount),
@@ -82,7 +109,7 @@ export default function Home() {
   }
 
   function addRow() {
-    setEntries((prev) => [...prev, createEmptyRow()]);
+    setEntries((prev) => [...prev, createEmptyRow(tokens[0])]);
   }
 
   function removeRow(id: string) {
@@ -96,15 +123,24 @@ export default function Home() {
     if (!row.address) return "Missing address";
     if (!row.token) return "Missing token";
     if (!row.amount) return "Missing amount";
-    if (!/^0x[a-fA-F0-9]{4,}$/.test(row.address.trim()))
-      return "Invalid address format";
+
+    if (chainType === "evm") {
+      if (!/^0x[a-fA-F0-9]{4,}$/.test(row.address.trim()))
+        return "Invalid EVM address format";
+    } else {
+      // Basic Tron address validation (starts with T, 34 chars)
+      if (!/^T[a-zA-Z0-9]{33}$/.test(row.address.trim()))
+        return "Invalid Tron address format";
+    }
+
     if (Number(row.amount) <= 0 || Number.isNaN(Number(row.amount)))
       return "Amount must be > 0";
     return null;
   }
 
   function handleDownloadTemplate() {
-    const blob = new Blob([TEMPLATE_CONTENT], {
+    const content = chainType === "evm" ? EVM_TEMPLATE : TRON_TEMPLATE;
+    const blob = new Blob([content], {
       type: "text/csv;charset=utf-8;",
     });
     const url = URL.createObjectURL(blob);
@@ -118,39 +154,49 @@ export default function Home() {
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    try {
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-    const text = await file.text();
-    const lines = text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
+      const text = await file.text();
+      const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
 
-    if (lines.length <= 1) return;
-    const [, ...rows] = lines;
+      if (lines.length <= 1) {
+        setGlobalError("File is empty or contains only header");
+        return;
+      }
+      const [, ...rows] = lines;
 
-    const parsed: RecipientRow[] = rows.map((line) => {
-      const [address, token, amount] = line
-        .split(/[,;\t]/)
-        .map((v) => v.trim());
-      const row: RecipientRow = {
-        id: crypto.randomUUID(),
-        address: address ?? "",
-        token: token || "USDT",
-        amount: amount ?? "",
-        fromUpload: true,
-      };
-      row.error = validateRow(row);
-      return row;
-    });
+      const parsed: RecipientRow[] = rows.map((line) => {
+        const [address, token, amount] = line
+          .split(/[,;\t]/)
+          .map((v) => v.trim());
+        const row: RecipientRow = {
+          id: crypto.randomUUID(),
+          address: address ?? "",
+          token: token || tokens[0],
+          amount: amount ?? "",
+          fromUpload: true,
+        };
+        row.error = validateRow(row);
+        return row;
+      });
 
-    setEntries((prev) => {
-      const filteredPrev = prev.filter(
-        (r) => !r.fromUpload || (!!r.address && !!r.amount)
+      setEntries((prev) => {
+        const filteredPrev = prev.filter(
+          (r) => !r.fromUpload || (!!r.address && !!r.amount)
+        );
+        return [...filteredPrev, ...parsed];
+      });
+    } catch (error) {
+      console.error("File upload failed:", error);
+      setGlobalError(
+        "Failed to process file. Please ensure valid CSV/Excel format."
       );
-      return [...filteredPrev, ...parsed];
-    });
+    }
   }
 
   function clearErroredRows() {
@@ -158,15 +204,21 @@ export default function Home() {
   }
 
   function handleEstimateAndReview() {
-    setTxStatus("estimating");
-    setTimeout(() => {
-      setTxStatus("review");
-      setShowReview(true);
-    }, 400);
+    try {
+      setTxStatus("estimating");
+      // Simulate estimation delay or actually calculate gas
+      setTimeout(() => {
+        setTxStatus("review");
+        setShowReview(true);
+      }, 400);
+    } catch (error) {
+      console.error("Estimation failed:", error);
+      setGlobalError("Failed to estimate gas. Please try again.");
+      setTxStatus("idle");
+    }
   }
 
   async function handleConfirmSend() {
-    setShowReview(false);
     setTxStatus("broadcasting");
     try {
       const tokens = validEntries.map((entry) => entry.token);
@@ -175,14 +227,22 @@ export default function Home() {
 
       console.log("Sending bulk transfer:", { tokens, recipients, amounts });
 
-      await bulkTransfer(tokens, recipients, amounts);
+      if (chainType === "evm") {
+        await evmBulkTransfer(tokens, recipients, amounts);
+      } else {
+        await tronBulkTransfer(tokens, recipients, amounts);
+      }
 
       // Only set to completed if no errors
       setTxStatus("completed");
-    } catch (error) {
+      setShowReview(false);
+    } catch (error: unknown) {
       console.error("Bulk transfer failed:", error);
       setTxStatus("idle"); // Reset or set to error state
-      // Optionally show error to user
+      setGlobalError(
+        (error as Error).message ||
+          "Transaction failed. Please check your wallet and try again."
+      );
     }
   }
   useEffect(() => {
@@ -202,9 +262,24 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-linear-to-b from-zinc-950 via-zinc-900 to-black text-zinc-50">
-      <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-6 md:px-8 md:py-10">
+      {/* <WalletDebug /> */}
+      <div className="flex min-h-screen w-full flex-col gap-6 px-4 py-6 md:px-8 md:py-5">
         {/* Header */}
-        <Navbar />
+        <Navbar selectedToken={entries[0]?.token} />
+
+        {/* Global Error Notification */}
+        {globalError && (
+          <div className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-900/90 px-4 py-3 text-red-100 shadow-xl backdrop-blur-md">
+            <Icon icon="mdi:alert-circle" className="text-xl text-red-400" />
+            <span className="text-sm font-medium">{globalError}</span>
+            <button
+              onClick={() => setGlobalError(null)}
+              className="ml-2 rounded-full p-1 hover:bg-red-800/50"
+            >
+              <Icon icon="mdi:close" className="text-lg" />
+            </button>
+          </div>
+        )}
 
         {/* Main content */}
         <main className="grid flex-1 gap-8 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
@@ -226,41 +301,59 @@ export default function Home() {
             </div>
 
             {/* Network selector */}
-            <div className="mt-1 rounded-xl border border-zinc-800/80 bg-zinc-900/70 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex flex-col">
-                  <span className="font-medium text-zinc-400">
-                    Select Network
-                  </span>
-                  <p className="mt-1 text-xs text-zinc-300">
-                    Choose where to broadcast your batch transaction.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <select
-                    className="h-9 rounded-lg border border-zinc-700 bg-zinc-900/90 px-2.5 text-sm outline-none ring-0 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
-                    value={selectedNetwork.name}
-                    onChange={async (e) => {
-                      const net: AppKitNetwork | undefined = networks.find(
-                        (n) => n.name === e.target.value
-                      );
-                      console.log(net);
-                      await switchNetwork(net || networks[0]);
-                      setSelectedNetwork(net as AppKitNetwork);
-                    }}
-                  >
-                    <option selected disabled value={selectedNetwork.name}>
+            {chainType === "evm" ? (
+              <div className="mt-1 rounded-xl border border-zinc-800/80 bg-zinc-900/70 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-zinc-400">
                       Select Network
-                    </option>
-                    {networks.map((n) => (
-                      <option key={n.id} value={n.name}>
-                        {n.name}
+                    </span>
+                    <p className="mt-1 text-xs text-zinc-300">
+                      Choose where to broadcast your batch transaction.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="h-9 rounded-lg border border-zinc-700 bg-zinc-900/90 px-2.5 text-sm outline-none ring-0 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/40"
+                      value={selectedNetwork.name}
+                      onChange={async (e) => {
+                        const net: AppKitNetwork | undefined = networks.find(
+                          (n) => n.name === e.target.value
+                        );
+                        console.log(net);
+                        await switchNetwork(net || networks[0]);
+                        setSelectedNetwork(net as AppKitNetwork);
+                      }}
+                    >
+                      <option disabled value="">
+                        Select Network
                       </option>
-                    ))}
-                  </select>
+                      {networks.map((n) => (
+                        <option key={n.id} value={n.name}>
+                          {n.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="mt-1 rounded-xl border border-zinc-800/80 bg-zinc-900/70 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-zinc-400">Network</span>
+                    <p className="mt-1 text-xs text-zinc-300">
+                      Tron Nile Testnet Selected
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-9 flex items-center rounded-lg border border-red-900/50 bg-red-950/30 px-3 text-sm text-red-400">
+                      TRON
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Recipient options: toggle between Manual / Excel */}
             <div className="mt-1 flex flex-col gap-4">
@@ -332,7 +425,9 @@ export default function Home() {
                               onChange={(e) =>
                                 setRow(row.id, { address: e.target.value })
                               }
-                              placeholder="0x..."
+                              placeholder={
+                                chainType === "evm" ? "0x..." : "T..."
+                              }
                               className="w-full rounded-lg border border-zinc-600 bg-zinc-900/50 px-4 py-2.5 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
                             />
                           </div>
@@ -349,7 +444,7 @@ export default function Home() {
                                 }
                                 className="w-full rounded-lg border border-zinc-600 bg-zinc-900/50 px-4 py-2.5 text-sm text-white outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30"
                               >
-                                {TOKENS.map((t) => (
+                                {tokens.map((t) => (
                                   <option
                                     key={t}
                                     value={t}
@@ -625,31 +720,40 @@ export default function Home() {
                   disabled={txStatus !== "completed"}
                   onClick={() => {
                     // Create CSV content
-                    const headers = ['Address', 'Token', 'Amount'];
+                    const headers = ["Address", "Token", "Amount"];
                     const csvContent = [
-                      headers.join(','),
-                      ...validEntries.map(entry => 
+                      headers.join(","),
+                      ...validEntries.map((entry) =>
                         [
                           `"${entry.address}"`,
                           `"${entry.token}"`,
-                          `"${entry.amount}"`
-                        ].join(',')
-                      )
-                    ].join('\n');
+                          `"${entry.amount}"`,
+                        ].join(",")
+                      ),
+                    ].join("\n");
 
                     // Create download link
-                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const blob = new Blob([csvContent], {
+                      type: "text/csv;charset=utf-8;",
+                    });
                     const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.setAttribute('href', url);
-                    link.setAttribute('download', `gassaverx-report-${new Date().toISOString().split('T')[0]}.csv`);
-                    link.style.visibility = 'hidden';
+                    const link = document.createElement("a");
+                    link.setAttribute("href", url);
+                    link.setAttribute(
+                      "download",
+                      `gassaverx-report-${
+                        new Date().toISOString().split("T")[0]
+                      }.csv`
+                    );
+                    link.style.visibility = "hidden";
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
                   }}
                 >
-                  <span className="text-sm"><Icon icon="basil:download-outline" /></span>
+                  <span className="text-sm">
+                    <Icon icon="basil:download-outline" />
+                  </span>
                   <span>Download report (.csv)</span>
                 </button>
               </div>
@@ -738,15 +842,27 @@ export default function Home() {
               <div className="mt-4 flex justify-end gap-2 text-sm">
                 <button
                   onClick={() => setShowReview(false)}
-                  className="rounded-xl border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500 hover:bg-zinc-800"
+                  disabled={txStatus === "broadcasting"}
+                  className="rounded-xl border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-500 hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleConfirmSend}
-                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-400 px-3.5 py-2 text-xs font-semibold text-black transition hover:brightness-105"
+                  disabled={txStatus === "broadcasting"}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-400 px-3.5 py-2 text-xs font-semibold text-black transition hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span>Confirm & Send</span>
+                  {txStatus === "broadcasting" && (
+                    <Icon
+                      icon="eos-icons:loading"
+                      className="text-lg animate-spin"
+                    />
+                  )}
+                  <span>
+                    {txStatus === "broadcasting"
+                      ? "Sending..."
+                      : "Confirm & Send"}
+                  </span>
                 </button>
               </div>
             </div>
