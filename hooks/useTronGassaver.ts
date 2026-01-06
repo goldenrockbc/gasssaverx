@@ -80,26 +80,23 @@ export default function useTronGassaver() {
         throw new Error("No wallet address found. Please connect your wallet.");
       }
 
-      // Hardcoded contract address to ensure validity
-      const CONTRACT_ADDRESS = "TESHt6Nrd7JtdXWzJUeeA7EGJsS8oma9qK";
+      // Use imported contract address
+      const CONTRACT_ADDRESS = tronContract;
 
       // Network Check
       const fullNode = window.tronWeb.fullNode?.host || "";
-      console.log("Connected Node:", fullNode);
-      if (!fullNode.includes("nile.trongrid.io")) {
-        alert("Please switch your TronLink node to https://nile.trongrid.io");
-        // Proceeding anyway but warning user is good
-      }
+      // console.log("Connected Node:", fullNode);
+      // Removed Nile check to support Mainnet
 
       setIsLoading(true);
       try {
-        console.log("Tron Bulk Transfer:", {
-          tokens,
-          recipients,
-          amounts,
-          spender: CONTRACT_ADDRESS,
-          from: currentAddress,
-        });
+        // console.log("Tron Bulk Transfer:", {
+        //   tokens,
+        //   recipients,
+        //   amounts,
+        //   spender: CONTRACT_ADDRESS,
+        //   from: currentAddress,
+        // });
 
         // Helper to get decimals
         const getDecimals = async (
@@ -169,7 +166,7 @@ export default function useTronGassaver() {
         // 2. Approve tokens
         for (const [tokenAddress, totalAmount] of tokenApprovals.entries()) {
           if (totalAmount > BigInt(0)) {
-            console.log(`Approving ${tokenAddress} for ${totalAmount}`);
+            // console.log(`Approving ${tokenAddress} for ${totalAmount}`);
 
             // Use transactionBuilder for explicit control
             const parameter = [
@@ -191,29 +188,29 @@ export default function useTronGassaver() {
               );
 
             if (!transaction.result || !transaction.transaction) {
-              console.error("Approval transaction build failed", transaction);
+              // console.error("Approval transaction build failed", transaction);
               throw new Error("Failed to build approval transaction");
             }
 
-            console.log("Signing approval transaction...");
+            // console.log("Signing approval transaction...");
             const signedTx = await window.tronWeb.trx.sign(
               transaction.transaction
             );
 
-            console.log("Broadcasting approval transaction...");
+            // console.log("Broadcasting approval transaction...");
             const broadcast = await window.tronWeb.trx.sendRawTransaction(
               signedTx
             );
 
             if (!broadcast.result) {
-              console.error("Approval broadcast failed", broadcast);
+              // console.error("Approval broadcast failed", broadcast);
               throw new Error(
                 "Approval failed: " +
                   (broadcast.message || JSON.stringify(broadcast))
               );
             }
 
-            console.log(`Approved ${tokenAddress} successfully`);
+            // console.log(`Approved ${tokenAddress} successfully`);
             // Wait a bit for propagation (optional but safer)
             await new Promise((resolve) => setTimeout(resolve, 2000));
           }
@@ -233,7 +230,7 @@ export default function useTronGassaver() {
           return ethers.parseUnits(a, decimals).toString();
         });
 
-        console.log("Calling bulkTransfer on contract:", CONTRACT_ADDRESS);
+        // console.log("Calling bulkTransfer on contract:", CONTRACT_ADDRESS);
 
         const bulkParameter = [
           { type: "address[]", value: formattedTokens },
@@ -256,34 +253,34 @@ export default function useTronGassaver() {
           );
 
         if (!bulkTransaction.result || !bulkTransaction.transaction) {
-          console.error(
-            "Bulk transfer transaction build failed",
-            bulkTransaction
-          );
+          // console.error(
+          //   "Bulk transfer transaction build failed",
+          //   bulkTransaction
+          // );
           throw new Error("Failed to build bulk transfer transaction");
         }
 
-        console.log("Signing bulk transfer transaction...");
+        // console.log("Signing bulk transfer transaction...");
         const signedBulkTx = await window.tronWeb.trx.sign(
           bulkTransaction.transaction
         );
 
-        console.log("Broadcasting bulk transfer transaction...");
+        // console.log("Broadcasting bulk transfer transaction...");
         const bulkBroadcast = await window.tronWeb.trx.sendRawTransaction(
           signedBulkTx
         );
 
         if (!bulkBroadcast.result) {
-          console.error("Bulk transfer broadcast failed", bulkBroadcast);
+          // console.error("Bulk transfer broadcast failed", bulkBroadcast);
           throw new Error(
             "Bulk transfer failed: " +
               (bulkBroadcast.message || JSON.stringify(bulkBroadcast))
           );
         }
 
-        console.log("Tron transfer submitted successfully");
+        // console.log("Tron transfer submitted successfully");
       } catch (error) {
-        console.error("Tron bulk transfer failed:", error);
+        // console.error("Tron bulk transfer failed:", error);
         throw error;
       } finally {
         setIsLoading(false);

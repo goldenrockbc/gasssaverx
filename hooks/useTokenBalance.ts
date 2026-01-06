@@ -35,11 +35,11 @@ export function useTokenBalance(tokenSymbol: string) {
           caipNetwork.id.toString().replace("eip155:", "")
         );
 
-        console.log("Fetching EVM Balance:", {
-          tokenSymbol,
-          networkId,
-          evmAddress,
-        });
+        // console.log("Fetching EVM Balance:", {
+        //   tokenSymbol,
+        //   networkId,
+        //   evmAddress,
+        // });
 
         // Check if token is native for the current chain
         const chainTokens = evmTokens[networkId];
@@ -111,7 +111,7 @@ export function useTokenBalance(tokenSymbol: string) {
               parseFloat(ethers.formatUnits(bal, decimals)).toFixed(2)
             );
           } catch (error: unknown) {
-            console.error("Failed to fetch token balance:", error);
+            // console.error("Failed to fetch token balance:", error);
             if ((error as { code?: string }).code === "BAD_DATA") {
               console.warn(
                 `Could not decode result data for ${tokenSymbol}. The contract might not be deployed on this network or the address is incorrect.`
@@ -142,10 +142,10 @@ export function useTokenBalance(tokenSymbol: string) {
           return;
         }
 
-        console.log("Fetching Tron Balance:", {
-          tokenSymbol,
-          currentTronAddress,
-        });
+        // console.log("Fetching Tron Balance:", {
+        //   tokenSymbol,
+        //   currentTronAddress,
+        // });
 
         if (tokenSymbol === "TRX") {
           if (!window.tronWeb) {
@@ -187,7 +187,7 @@ export function useTokenBalance(tokenSymbol: string) {
               ).toFixed(2);
               setBalance(formatted);
             } catch (e) {
-              console.error("Error fetching TRC20 balance", e);
+              // console.error("Error fetching TRC20 balance", e);
               setBalance("0");
             }
           } else {
@@ -197,7 +197,7 @@ export function useTokenBalance(tokenSymbol: string) {
         }
       }
     } catch (e) {
-      console.error("Failed to fetch balance", e);
+      // console.error("Failed to fetch balance", e);
       setBalance("0");
     } finally {
       setLoading(false);

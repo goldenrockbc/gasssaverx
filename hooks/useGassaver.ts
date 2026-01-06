@@ -8,10 +8,19 @@ import { ethers } from "ethers";
 import { useEffect, useState, useCallback } from "react";
 import { contracts, tokens as tokenContracts } from "@/lib/contract";
 
+interface EthersError extends Error {
+  code?: string | number;
+  info?: {
+    error?: {
+      code?: number;
+    };
+  };
+}
+
 export default function useGassaver() {
   const [contract, setContract] = useState<ethers.Contract | null>(null);
   const { walletProvider } = useAppKitProvider<Provider>("eip155");
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const { chainId } = useAppKitNetwork();
 
   const approveTokens = useCallback(
@@ -29,18 +38,29 @@ export default function useGassaver() {
         signer
       );
 
-      const tx = await tokenContract.approve(
-        contracts[chainId as keyof typeof contracts],
-        amount
-      );
-
-      await tx.wait();
+      try {
+        const tx = await tokenContract.approve(
+          contracts[chainId as keyof typeof contracts],
+          amount
+        );
+        await tx.wait();
+      } catch (e: unknown) {
+        const error = e as EthersError;
+        if (
+          error.code === "ACTION_REJECTED" ||
+          error.info?.error?.code === 4001
+        ) {
+          throw new Error("Approval rejected by user");
+        }
+        throw error;
+      }
     },
     [walletProvider, chainId]
   );
 
   const bulkTransfer = useCallback(
     async (tokens: string[], recipients: string[], amounts: string[]) => {
+      setIsLoading(true);
       try {
         if (!contract || !walletProvider || !chainId) {
           throw new Error("Contract or wallet provider not initialized");
@@ -53,27 +73,55 @@ export default function useGassaver() {
           throw new Error("Input arrays must have the same length");
         }
 
-        console.log({ tokens, recipients, amounts });
+        // console.log({ tokens, recipients, amounts });
 
         const provider = new ethers.BrowserProvider(walletProvider);
 
         // Helper to get decimals
-        const getDecimals = async (tokenSymbol: string, tokenAddress: string) => {
-           if (tokenSymbol.toLowerCase() === "eth" || tokenSymbol === ethers.ZeroAddress) return 18;
-           
-           try {
-             const tokenContract = new ethers.Contract(
-               tokenAddress,
-               ["function decimals() view returns (uint8)"],
-               provider
-             );
-             return Number(await tokenContract.decimals());
-           } catch (e) {
-             console.warn(`Failed to fetch decimals for ${tokenSymbol}, defaulting to 18`, e);
-             // Fallback to existing logic if fetch fails
-             return ["USDT", "USDC"].includes(tokenSymbol.toUpperCase()) ? 6 : 18;
-           }
+        const getDecimals = async (
+          tokenSymbol: string,
+          tokenAddress: string
+        ) => {
+          // Native tokens (ETH, BNB, MATIC depending on chain) are always 18
+          if (tokenAddress === ethers.ZeroAddress) return 18;
+
+          try {
+            const tokenContract = new ethers.Contract(
+              tokenAddress,
+              ["function decimals() view returns (uint8)"],
+              provider
+            );
+            return Number(await tokenContract.decimals());
+          } catch (e) {
+            console.warn(
+              `Failed to fetch decimals for ${tokenSymbol}, using fallback`,
+              e
+            );
+
+            // Chain-specific fallbacks
+            const chainIdNum = Number(chainId);
+            const symbol = tokenSymbol.toUpperCase();
+
+            // ETH (1)
+            if (chainIdNum === 1) {
+              if (["USDT", "USDC"].includes(symbol)) return 6;
+            }
+            // BSC (56)
+            else if (chainIdNum === 56) {
+              // USDT and USDC on BSC are 18 decimals
+              if (["USDT", "USDC"].includes(symbol)) return 18;
+            }
+            // Polygon (137)
+            else if (chainIdNum === 137) {
+              // USDT and USDC (Native) on Polygon are 6 decimals
+              if (["USDT", "USDC"].includes(symbol)) return 6;
+            }
+
+            // Default fallback
+            return ["USDT", "USDC"].includes(symbol) ? 6 : 18;
+          }
         };
+        // console.log(getDecimals());
 
         // Create a map to track total amount per token
         const tokenApprovals = new Map<string, bigint>();
@@ -82,19 +130,18 @@ export default function useGassaver() {
 
         // Pre-fetch decimals for all unique tokens
         for (let i = 0; i < tokens.length; i++) {
-           const token = tokens[i];
-           if (tokenDecimalsMap.has(token)) continue;
+          const token = tokens[i];
+          if (tokenDecimalsMap.has(token)) continue;
 
-           const tokenAddress = chainId in tokenContracts
+          const tokenAddress =
+            chainId in tokenContracts
               ? tokenContracts[Number(chainId)][token]
               : undefined;
-            
-           if (tokenAddress) {
-             const decimals = await getDecimals(token, tokenAddress);
-             tokenDecimalsMap.set(token, decimals);
-           } else if (token.toLowerCase() === "eth") {
-             tokenDecimalsMap.set(token, 18);
-           }
+
+          if (tokenAddress) {
+            const decimals = await getDecimals(token, tokenAddress);
+            tokenDecimalsMap.set(token, decimals);
+          }
         }
 
         // Calculate total amount to approve for each token and total native amount
@@ -105,15 +152,15 @@ export default function useGassaver() {
               ? tokenContracts[Number(chainId)][token]
               : undefined;
 
-          // Handle native token (ETH)
-          if (token.toLowerCase() === "eth" || token === ethers.ZeroAddress) {
+          if (!tokenAddress) continue;
+
+          // Handle native token (Address is ZeroAddress)
+          if (tokenAddress === ethers.ZeroAddress) {
             totalNativeAmount += BigInt(
               ethers.parseUnits(amounts[i], 18).toString()
             );
             continue;
           }
-
-          if (!tokenAddress) continue;
 
           const decimals = tokenDecimalsMap.get(token) || 18;
           const amount = ethers.parseUnits(amounts[i], decimals);
@@ -123,17 +170,19 @@ export default function useGassaver() {
 
         // Execute approvals for each unique token
         for (const [tokenAddress, totalAmount] of tokenApprovals.entries()) {
+          // Native tokens (ZeroAddress) don't need approval
+          if (tokenAddress === ethers.ZeroAddress) continue;
+
           if (totalAmount > BigInt(0)) {
             await approveTokens(tokenAddress, totalAmount);
           }
         }
 
         // Prepare token addresses (use ZeroAddress for native token)
-        const formattedTokens = tokens.map((token) =>
-          token.toLowerCase() === "eth" || token === ethers.ZeroAddress
-            ? ethers.ZeroAddress
-            : tokenContracts[Number(chainId)]?.[token]
-        );
+        const formattedTokens = tokens.map((token) => {
+          const addr = tokenContracts[Number(chainId)]?.[token];
+          return addr || ethers.ZeroAddress;
+        });
 
         const formattedAmounts = amounts.map((amount, index) => {
           const tokenSymbol = tokens[index];
@@ -141,12 +190,12 @@ export default function useGassaver() {
           return ethers.parseUnits(amount, decimals);
         });
 
-        console.log({
-          formattedTokens,
-          recipients,
-          formattedAmounts,
-          value: totalNativeAmount,
-        });
+        // console.log({
+        //   formattedTokens,
+        //   recipients,
+        //   formattedAmounts,
+        //   value: totalNativeAmount,
+        // });
 
         // Execute the bulk transfer with the native token value if needed
         const tx = await contract.bulkTransfer(
@@ -159,12 +208,21 @@ export default function useGassaver() {
         await tx.wait();
 
         return { success: true };
-      } catch (error) {
-        console.error("Bulk transfer failed:", error);
-        setError(
-          error instanceof Error ? error.message : "Unknown error occurred"
-        );
-        throw error;
+      } catch (error: unknown) {
+        // console.error("Bulk transfer failed:", error);
+
+        let errorMessage = "Unknown error occurred";
+        const err = error as EthersError;
+
+        if (err.code === "ACTION_REJECTED" || err.info?.error?.code === 4001) {
+          errorMessage = "Transaction rejected by user";
+        } else if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+
+        throw new Error(errorMessage);
+      } finally {
+        setIsLoading(false);
       }
     },
     [chainId, contract, walletProvider, approveTokens]
@@ -173,7 +231,6 @@ export default function useGassaver() {
   useEffect(() => {
     const initContract = async () => {
       if (!walletProvider || !contracts[chainId as keyof typeof contracts]) {
-        setError("Wallet provider or contract is not available");
         return;
       }
 
@@ -188,7 +245,7 @@ export default function useGassaver() {
 
         setContract(contractInstance);
       } catch (error) {
-        console.log({ error });
+        // console.log({ error });
       }
     };
 
@@ -197,7 +254,7 @@ export default function useGassaver() {
 
   return {
     contract,
-    error,
     bulkTransfer,
+    isLoading,
   };
 }

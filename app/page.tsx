@@ -125,7 +125,8 @@ export default function Home() {
     if (!row.amount) return "Missing amount";
 
     if (chainType === "evm") {
-      if (!/^0x[a-fA-F0-9]{4,}$/.test(row.address.trim()))
+      // Allow 0x prefix or just 40 hex characters
+      if (!/^(0x)?[a-fA-F0-9]{40}$/.test(row.address.trim()))
         return "Invalid EVM address format";
     } else {
       // Basic Tron address validation (starts with T, 34 chars)
@@ -192,7 +193,7 @@ export default function Home() {
         return [...filteredPrev, ...parsed];
       });
     } catch (error) {
-      console.error("File upload failed:", error);
+      // console.error("File upload failed:", error);
       setGlobalError(
         "Failed to process file. Please ensure valid CSV/Excel format."
       );
@@ -212,7 +213,7 @@ export default function Home() {
         setShowReview(true);
       }, 400);
     } catch (error) {
-      console.error("Estimation failed:", error);
+      // console.error("Estimation failed:", error);
       setGlobalError("Failed to estimate gas. Please try again.");
       setTxStatus("idle");
     }
@@ -222,14 +223,26 @@ export default function Home() {
     setTxStatus("broadcasting");
     try {
       const tokens = validEntries.map((entry) => entry.token);
-      const recipients = validEntries.map((entry) => entry.address);
       const amounts = validEntries.map((entry) => entry.amount);
 
-      console.log("Sending bulk transfer:", { tokens, recipients, amounts });
-
       if (chainType === "evm") {
+        const recipients = validEntries.map((entry) => {
+          const addr = entry.address.trim();
+          return addr.startsWith("0x") ? addr : `0x${addr}`;
+        });
+        // console.log("Sending bulk transfer (EVM):", {
+        //   tokens,
+        //   recipients,
+        //   amounts,
+        // });
         await evmBulkTransfer(tokens, recipients, amounts);
       } else {
+        const recipients = validEntries.map((entry) => entry.address);
+        // console.log("Sending bulk transfer (Tron):", {
+        //   tokens,
+        //   recipients,
+        //   amounts,
+        // });
         await tronBulkTransfer(tokens, recipients, amounts);
       }
 
@@ -237,7 +250,7 @@ export default function Home() {
       setTxStatus("completed");
       setShowReview(false);
     } catch (error: unknown) {
-      console.error("Bulk transfer failed:", error);
+      // console.error("Bulk transfer failed:", error);
       setTxStatus("idle"); // Reset or set to error state
       setGlobalError(
         (error as Error).message ||
@@ -248,7 +261,7 @@ export default function Home() {
   useEffect(() => {
     const getGees = async () => {
       const network = await selectedNetwork;
-      console.log({ network });
+      // console.log({ network });
     };
     getGees();
   }, [selectedNetwork]);
@@ -320,7 +333,7 @@ export default function Home() {
                         const net: AppKitNetwork | undefined = networks.find(
                           (n) => n.name === e.target.value
                         );
-                        console.log(net);
+                        // console.log(net);
                         await switchNetwork(net || networks[0]);
                         setSelectedNetwork(net as AppKitNetwork);
                       }}

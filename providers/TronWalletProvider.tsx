@@ -65,9 +65,9 @@ export default function TronWalletProvider({
             .isTrustWallet &&
           (tronLink as { isTronLink?: boolean }).isTronLink
         ) {
-          console.log(
-            "[TronWalletProvider] Found real TronLink in window.tronLink, restoring to window.tron"
-          );
+          // console.log(
+          //   "[TronWalletProvider] Found real TronLink in window.tronLink, restoring to window.tron"
+          // );
           (window as unknown as Record<string, unknown>).tron = tronLink;
           fixed = true;
         } else if (
@@ -77,17 +77,17 @@ export default function TronWalletProvider({
           !(tron as { isTrustWallet?: boolean }).isTrustWallet &&
           (tron as { isTronLink?: boolean }).isTronLink
         ) {
-          console.log(
-            "[TronWalletProvider] Found real TronLink in window.tron, restoring to window.tronLink"
-          );
+          // console.log(
+          //   "[TronWalletProvider] Found real TronLink in window.tron, restoring to window.tronLink"
+          // );
           (window as unknown as Record<string, unknown>).tronLink = tron;
           fixed = true;
         }
 
         if (fixed) {
-          console.log(
-            "[TronWalletProvider] Re-initializing adapters after fix"
-          );
+          // console.log(
+          //   "[TronWalletProvider] Re-initializing adapters after fix"
+          // );
           // Re-create adapters to pick up the correct window object
           initAdapters();
         }
@@ -98,19 +98,19 @@ export default function TronWalletProvider({
   }, []);
 
   function onConnect(address: string) {
-    console.log("[TronWalletProvider] onConnect:", address);
+    // console.log("[TronWalletProvider] onConnect:", address);
   }
 
   function onAccountsChanged(address: string) {
-    console.log("[TronWalletProvider] onAccountsChanged:", address);
+    // console.log("[TronWalletProvider] onAccountsChanged:", address);
   }
 
   function onAdapterChanged(adapter: Adapter | null) {
-    console.log("[TronWalletProvider] onAdapterChanged:", adapter?.name);
+    // console.log("[TronWalletProvider] onAdapterChanged:", adapter?.name);
   }
 
   function onError(e: Error) {
-    console.error("[TronWalletProvider] onError:", e);
+    // console.error("[TronWalletProvider] onError:", e);
   }
 
   return (

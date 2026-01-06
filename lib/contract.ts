@@ -2,24 +2,24 @@ import { ethers } from "ethers";
 
 const tokens: Record<number, Record<string, string>> = {
   1: {
-    USDT: "0xC8673dE666Ac880C4f220176588C6d368D574aaF",
-    USDC: "0xBDeD8Ec7EFc7C3bE1Bf086d3832285c12B6CB2f4",
+    USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
     ETH: ethers.ZeroAddress,
-    BNB: "0xC8673dE666Ac880C4f220176588C6d368D574aaF",
-    MATIC: "0xC8673dE666Ac880C4f220176588C6d368D574aaF",
+    BNB: "0xB8c77482e45F1F44dE1745F52C74426C631bDD52",
+    MATIC: "0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0",
   },
   56: {
-    USDT: "0xC8673dE666Ac880C4f220176588C6d368D574aaF",
-    USDC: "0xBDeD8Ec7EFc7C3bE1Bf086d3832285c12B6CB2f4",
-    ETH: "0xC8673dE666Ac880C4f220176588C6d368D574aaF",
+    USDT: "0x55d398326f99059fF775485246999027B3197955",
+    USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+    ETH: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8",
     BNB: ethers.ZeroAddress,
-    MATIC: "0xC8673dE666Ac880C4f220176588C6d368D574aaF",
+    MATIC: "0xCC42724C6683B7E57334c4E856f4c9965ED682bD",
   },
   137: {
-    USDT: "0xC8673dE666Ac880C4f220176588C6d368D574aaF",
-    USDC: "0xBDeD8Ec7EFc7C3bE1Bf086d3832285c12B6CB2f4",
-    ETH: "0xC8673dE666Ac880C4f220176588C6d368D574aaF",
-    BNB: "0xC8673dE666Ac880C4f220176588C6d368D574aaF",
+    USDT: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+    USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+    ETH: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+    BNB: "0x3BA4c387f786bFEE076A58914F5Bd38d668af573",
     MATIC: ethers.ZeroAddress,
   },
   11155111: {
@@ -39,16 +39,18 @@ const tokens: Record<number, Record<string, string>> = {
 };
 
 const contracts = {
+  1: "0xA26Ea055F26542db99F0e4772ec8d17d142045CB",
+  56: "0x8E8836cB12fA6c888F8Ec853c6351A9ba13d3524",
   11155111: "0xE0636c80c18931cf5BFd24c8A3679aa85e8e7d8D",
   11142220: "0x46c0752624339B3A3e3ACbcB75faa173a5d25928",
 };
 
 const tronTokens: Record<string, string> = {
-  USDT: "TLCuviLXZtgF7JgXxwrUzrHpt4mmbMRTfW", // Nile Mock USDT
-  USDC: "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", // Mainnet USDC (Update if needed for Nile)
+  USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", // Mainnet USDT
+  USDC: "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", // Mainnet USDC
   TRX: "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb", // Using zero address equivalent
 };
 
-const tronContract = "TESHt6Nrd7JtdXWzJUeeA7EGJsS8oma9qK"; // Nile Testnet GasSaver Contract
+const tronContract = "TBABQkTzHkveNvq3W2hzMq5pJGDzNH9vYB"; // Mainnet GasSaver Contract
 
 export { tokens, contracts, tronTokens, tronContract };
