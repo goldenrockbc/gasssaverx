@@ -149,31 +149,44 @@ export default function useGassaver() {
         const tokenDecimalsMap = new Map<string, number>();
         let totalNativeAmount = BigInt(0);
 
+        // Helper to get token address case-insensitively
+        const getTokenAddress = (symbol: string) => {
+          const chainTokens = tokenContracts[Number(chainId)];
+          if (!chainTokens) return undefined;
+
+          // Direct match
+          if (chainTokens[symbol]) return chainTokens[symbol];
+
+          // Case-insensitive match
+          const key = Object.keys(chainTokens).find(
+            (k) => k.toLowerCase() === symbol.toLowerCase()
+          );
+          return key ? chainTokens[key] : undefined;
+        };
+
         // Pre-fetch decimals for all unique tokens
         for (let i = 0; i < tokens.length; i++) {
           const token = tokens[i];
           if (tokenDecimalsMap.has(token)) continue;
 
-          const tokenAddress =
-            chainId in tokenContracts
-              ? tokenContracts[Number(chainId)][token]
-              : undefined;
+          const tokenAddress = getTokenAddress(token);
 
           if (tokenAddress) {
             const decimals = await getDecimals(token, tokenAddress);
             tokenDecimalsMap.set(token, decimals);
+          } else {
+            console.warn(`Token address not found for ${token}`);
           }
         }
 
         // Calculate total amount to approve for each token and total native amount
         for (let i = 0; i < tokens.length; i++) {
           const token = tokens[i];
-          const tokenAddress =
-            chainId in tokenContracts
-              ? tokenContracts[Number(chainId)][token]
-              : undefined;
+          const tokenAddress = getTokenAddress(token);
 
-          if (!tokenAddress) continue;
+          if (!tokenAddress) {
+            throw new Error(`Token address not found for symbol: ${token}`);
+          }
 
           // Handle native token (Address is ZeroAddress)
           if (tokenAddress === ethers.ZeroAddress) {
@@ -201,8 +214,9 @@ export default function useGassaver() {
 
         // Prepare token addresses (use ZeroAddress for native token)
         const formattedTokens = tokens.map((token) => {
-          const addr = tokenContracts[Number(chainId)]?.[token];
-          return addr || ethers.ZeroAddress;
+          const addr = getTokenAddress(token);
+          if (!addr) throw new Error(`Token address not found for ${token}`);
+          return addr;
         });
 
         const formattedAmounts = amounts.map((amount, index) => {
@@ -218,12 +232,36 @@ export default function useGassaver() {
         //   value: totalNativeAmount,
         // });
 
+        // Estimate gas to detect failures early and set proper limit
+        let estimatedGas;
+        const txParams = {
+          value: totalNativeAmount > 0 ? totalNativeAmount : undefined,
+        };
+
+        try {
+          estimatedGas = await contract.bulkTransfer.estimateGas(
+            formattedTokens,
+            recipients,
+            formattedAmounts,
+            txParams
+          );
+          console.log("Estimated Gas:", estimatedGas.toString());
+        } catch (error) {
+          console.error("Gas estimation failed:", error);
+          throw new Error(
+            "Gas estimation failed. The transaction may revert. Please check your token balance and approvals."
+          );
+        }
+
         // Execute the bulk transfer with the native token value if needed
         const tx = await contract.bulkTransfer(
           formattedTokens,
           recipients,
           formattedAmounts,
-          { value: totalNativeAmount > 0 ? totalNativeAmount : undefined }
+          {
+            ...txParams,
+            gasLimit: (estimatedGas * BigInt(150)) / BigInt(100), // Add 50% buffer
+          }
         );
 
         await tx.wait();
