@@ -34,16 +34,37 @@ export default function useGassaver() {
         tokenAddress,
         [
           "function approve(address spender, uint256 amount) external returns (bool)",
+          "function allowance(address owner, address spender) view returns (uint256)",
         ],
         signer
       );
 
       try {
-        const tx = await tokenContract.approve(
-          contracts[chainId as keyof typeof contracts],
-          amount
+        const owner = await signer.getAddress();
+        const spender = contracts[chainId as keyof typeof contracts];
+        const currentAllowance: bigint = await tokenContract.allowance(
+          owner,
+          spender
         );
-        await tx.wait();
+
+        const usdtAddress =
+          tokenContracts[Number(chainId)]?.USDT?.toLowerCase() || "";
+        const isUSDT = tokenAddress.toLowerCase() === usdtAddress;
+
+        if (isUSDT) {
+          if (currentAllowance >= amount) {
+            return;
+          }
+          if (currentAllowance > BigInt(0) && amount > BigInt(0)) {
+            const resetTx = await tokenContract.approve(spender, BigInt(0));
+            await resetTx.wait();
+          }
+          const tx = await tokenContract.approve(spender, amount);
+          await tx.wait();
+        } else {
+          const tx = await tokenContract.approve(spender, amount);
+          await tx.wait();
+        }
       } catch (e: unknown) {
         const error = e as EthersError;
         if (
